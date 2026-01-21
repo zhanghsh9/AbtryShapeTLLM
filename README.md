@@ -11,6 +11,8 @@ This project demonstrates a "chat-to-chip" workflow that leverages Large Languag
 
 The method eliminates the need for complex, task-specific neural network architecture engineering, offering a user-friendly, data-driven approach to nanophotonics.
 
+For data used in the fine tuning and test process, please email me at hpz5226 at psu.edu. 
+
 ## Features
 
 * **Efficient Fine-Tuning:** Utilizes [Unsloth](https://unsloth.ai) and LoRA (Low-Rank Adaptation) for memory-efficient training on consumer-grade GPUs.
@@ -32,5 +34,5 @@ If you use this code or data in your research, please cite the following paper:
   year={2025},
   publisher={De Gruyter},
   doi = {10.1515/nanoph-2025-0343},
-  url = {[https://doi.org/10.1515/nanoph-2025-0343](https://doi.org/10.1515/nanoph-2025-0343)}
+  url = {https://www.degruyterbrill.com/document/doi/10.1515/nanoph-2025-0343/html}
 }
