@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 import json
 import ast
 import re
@@ -22,14 +22,15 @@ import time
 # User configuration
 # ---------------------------
 # Path to the folder containing the fine-tuned model (contains config, pytorch_model.bin, adapter files)
-SPLIT_DIR = 'results_phi35_mini/run_20250521_222012'
+SPLIT_DIR = 'results_phi35_mini/run_20250614_135044'
 MODEL_DIR = SPLIT_DIR + '/llama_ft'
 # Path to the folder containing validation.json and test.json
 
 # Output .mat file
 OUTPUT_MAT = os.path.join(SPLIT_DIR, "evaluation_predictions.mat")
 # Batch size for generation
-BATCH_SIZE = 20
+BATCH_SIZE = 122
+
 BUFFER_TOKENS = 0  # Safety buffer when computing max_new_tokens
 
 # ───────────────────────────────────────────────────────────────────── #

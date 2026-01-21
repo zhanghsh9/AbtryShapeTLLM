@@ -57,7 +57,7 @@ def main() -> None:
         seed=3407,
         dataset_path="simulation_data_31_least.json",
         train_split=0.80,  # 4 : 1
-        base_model_name="unsloth/Phi-3.5-mini-instruct-bnb-4bit",
+        base_model_name="unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit",
         lora_rank=32,
         lora_alpha=32,
         lora_dropout=0.0,
@@ -66,11 +66,11 @@ def main() -> None:
         grad_accum=1,
         max_steps=1000000,
         weight_decay=1e-2,
-        epochs=8,
+        epochs=4,
     )
 
     # Derived paths
-    OUTPUT_ROOT = "results_phi35_mini"
+    OUTPUT_ROOT = "results_llama_8B"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(OUTPUT_ROOT) / f"run_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)

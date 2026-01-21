@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import json
 import ast
 import re
@@ -22,14 +22,14 @@ import time
 # User configuration
 # ---------------------------
 # Path to the folder containing the fine-tuned model (contains config, pytorch_model.bin, adapter files)
-SPLIT_DIR = 'results_gemma2/run_20250611_235942'
+SPLIT_DIR = 'results_llama_1B/run_20250613_104944'
 MODEL_DIR = SPLIT_DIR + '/llama_ft'
 # Path to the folder containing validation.json and test.json
 
 # Output .mat file
 OUTPUT_MAT = os.path.join(SPLIT_DIR, "evaluation_predictions.mat")
 # Batch size for generation
-BATCH_SIZE = 90
+BATCH_SIZE = 512
 BUFFER_TOKENS = 0  # Safety buffer when computing max_new_tokens
 
 # ───────────────────────────────────────────────────────────────────── #
@@ -233,12 +233,12 @@ def main():
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=MODEL_DIR,
         max_seq_length=max_seq_length,
-        # device_map="auto",
+        #device_map="auto",
         load_in_4bit=True,
         fast_inference=False,
         max_lora_rank = lora_rank,
         # offload_folder=os.path.join(output_dir, "offload"),
-        gpu_memory_utilization = 1,
+        gpu_memory_utilization = 0.99,
     )
     FastLanguageModel.for_inference(model)
     # LoRA adapters have been saved in MODEL_DIR, auto-loaded by FastLanguageModel

@@ -62,15 +62,15 @@ def main() -> None:
         lora_alpha=32,
         lora_dropout=0.0,
         learning_rate=4e-4,
-        batch_size=24,
-        grad_accum=8,
+        batch_size=192,
+        grad_accum=1,
         max_steps=1000000,
         weight_decay=1e-2,
         epochs=8,
     )
 
     # Derived paths
-    OUTPUT_ROOT = "results_mistral"
+    OUTPUT_ROOT = "results_mistral_7B"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(OUTPUT_ROOT) / f"run_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)

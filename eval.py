@@ -22,14 +22,14 @@ import time
 # User configuration
 # ---------------------------
 # Path to the folder containing the fine-tuned model (contains config, pytorch_model.bin, adapter files)
-SPLIT_DIR = 'results_llama/run_20250603_024152'
+SPLIT_DIR = 'results_llama/run_20250608_110132'
 MODEL_DIR = SPLIT_DIR + '/llama_ft'
 # Path to the folder containing validation.json and test.json
 
 # Output .mat file
 OUTPUT_MAT = os.path.join(SPLIT_DIR, "evaluation_predictions.mat")
 # Batch size for generation
-BATCH_SIZE = 32
+BATCH_SIZE = 8
 BUFFER_TOKENS = 0  # Safety buffer when computing max_new_tokens
 
 # ───────────────────────────────────────────────────────────────────── #
@@ -94,11 +94,7 @@ def batch_generate(prompts, model, true_spectrum, grids, tokenizer, max_new_toke
             start = batch_idx * batch_size
             end   = start + batch_size
             batch_enc = {k: v[start:end] for k, v in enc.items()}
-            try:
-                out_ids = model.generate(**batch_enc, max_new_tokens=max_new_tokens)
-            except RuntimeError:
-                # print(prompts)
-                continue
+            out_ids = model.generate(**batch_enc, max_new_tokens=max_new_tokens)
             texts  = tokenizer.batch_decode(out_ids.cpu(), skip_special_tokens=True)
             mse_temp = []
             for i, text in enumerate(texts):

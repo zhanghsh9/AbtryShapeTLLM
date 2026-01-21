@@ -1,30 +1,39 @@
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
-import json, ast, re, shutil, time
-from pathlib import Path
-
+import json
+import ast
+import re
 import numpy as np
-import torch
-from torch.nn.functional import mse_loss
-from scipy.io import savemat, loadmat
+import unsloth
 from datasets import load_dataset
-from tqdm import tqdm
 from unsloth import FastLanguageModel
 from transformers import AutoTokenizer
+from multiprocessing import Pool
+from scipy.io import savemat, loadmat
+import torch
+from torch.nn.functional import mse_loss
+from tqdm import tqdm
+from pathlib import Path
+import shutil
+import time
 
-# ──────────────────────────────  USER CONFIG  ───────────────────────────── #
-SPLIT_DIR   = 'results_mistral/run_20250523_005850'
-MODEL_DIR   = SPLIT_DIR + '/llama_ft'
 
-NUM_RUNS              = 5          # <── how many times to repeat the test
-SAVE_SEPARATE_FILES   = True       # True  → one file per run  (…_run{N}.mat)
-                                   # False → one combined file with lists
+# ---------------------------
+# User configuration
+# ---------------------------
+# Path to the folder containing the fine-tuned model (contains config, pytorch_model.bin, adapter files)
+SPLIT_DIR = 'results_mistral_7B/run_20250701_105453'
+MODEL_DIR = SPLIT_DIR + '/llama_ft'
+# Path to the folder containing validation.json and test.json
 
-BATCH_SIZE   = 24
-BUFFER_TOKENS = 0
+# Output .mat file
+OUTPUT_MAT = os.path.join(SPLIT_DIR, "evaluation_predictions.mat")
+# Batch size for generation
+BATCH_SIZE = 320
+BUFFER_TOKENS = 0  # Safety buffer when computing max_new_tokens
 
-# ──────────────────────────────  CONSTANTS  ─────────────────────────────── #
+# ───────────────────────────────────────────────────────────────────── #
+# helper: make Alpaca-style prompt (same as during training)
 ALPACA_PROMPT = (
     "Below is an instruction that describes a task, paired with an input that "
     "provides further context. Write a response that appropriately completes "
@@ -85,11 +94,7 @@ def batch_generate(prompts, model, true_spectrum, grids, tokenizer, max_new_toke
             start = batch_idx * batch_size
             end   = start + batch_size
             batch_enc = {k: v[start:end] for k, v in enc.items()}
-            try:
-                out_ids = model.generate(**batch_enc, max_new_tokens=max_new_tokens)
-            except RuntimeError:
-                # print(prompts)
-                continue
+            out_ids = model.generate(**batch_enc, max_new_tokens=max_new_tokens)
             texts  = tokenizer.batch_decode(out_ids.cpu(), skip_special_tokens=True)
             mse_temp = []
             for i, text in enumerate(texts):
@@ -130,7 +135,7 @@ def batch_generate(prompts, model, true_spectrum, grids, tokenizer, max_new_toke
                                              torch.Tensor(true_spectrum[global_idx]))))
                 mse_temp.append(mse_list[-1])
             print('MSE for this batch is ', np.mean(mse_temp))
-    num_failed = len(failed_prompts)
+    num_failed=len(failed_prompts)
     # one-by-one re-generation of the failures
     for p, truth, grid in tqdm(
             zip(failed_prompts, failed_truths, failed_grids),
@@ -145,11 +150,7 @@ def batch_generate(prompts, model, true_spectrum, grids, tokenizer, max_new_toke
             if temp_counter >= 100:
                 break
             with torch.no_grad():
-                try:
-                 out_id = model.generate(**single_enc, max_new_tokens=max_new_tokens)
-                except RuntimeError:
-                    # print(prompts)
-                    continue
+                out_id = model.generate(**single_enc, max_new_tokens=max_new_tokens, do_sample=True, temperature=1,)
             txt = tokenizer.decode(out_id[0], skip_special_tokens=True)
             print(txt)
             r = txt.find('Response:')
@@ -211,83 +212,58 @@ def evaluate_split(split_name: str, model, tokenizer, max_new_tokens, batch_size
 
 
 def main():
-    # ────────── copy script for reproducibility (unchanged) ──────────
+
+    # ───────────────────── Self-copy for reproducibility ─────────────────── #
     try:
         this_file = Path(__file__)
         shutil.copy(this_file, os.path.join(SPLIT_DIR, os.path.basename(__file__)))
-    except NameError:
-        pass
+    except NameError:  # interactive / notebook
+        pass  # ignore – no __file__
 
-    # ────────── recover training hyper-params ──────────
-    cfg             = loadmat(os.path.join(SPLIT_DIR, "training_stats.mat"))["config"][0, 0]
-    max_seq_length  = int(cfg["max_seq_length"][0, 0])
-    lora_rank       = int(cfg["lora_rank"][0, 0])
+    # 1) read training hyper-params to recover max_seq_length
+    cfg = loadmat(os.path.join(SPLIT_DIR, "training_stats.mat"))["config"][0,0]
+    max_seq_length = int(cfg["max_seq_length"][0,0])
+    lora_rank=int(cfg["lora_rank"][0,0])
 
-    # ────────── load model + tokenizer (unchanged) ──────────
+    # 1. Load fine-tuned model + tokenizer
     model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name            = MODEL_DIR,
-        max_seq_length        = max_seq_length,
-        load_in_4bit          = True,
-        fast_inference        = False,
-        max_lora_rank         = lora_rank,
-        gpu_memory_utilization= 0.99,
+        model_name=MODEL_DIR,
+        max_seq_length=max_seq_length,
+        #device_map="auto",
+        load_in_4bit=True,
+        fast_inference=False,
+        max_lora_rank = lora_rank,
+        # offload_folder=os.path.join(output_dir, "offload"),
+        gpu_memory_utilization = 1,
     )
     FastLanguageModel.for_inference(model)
+    # LoRA adapters have been saved in MODEL_DIR, auto-loaded by FastLanguageModel
 
-    # compute max_new_tokens once
-    dummy_prompt    = json.load(open(os.path.join(SPLIT_DIR, "train.json")))[0]
-    prompt_len      = len(tokenizer(ALPACA_PROMPT.format(dummy_prompt["instruction"],
-                                                         dummy_prompt["input"], "")).input_ids)
-    max_new_tokens  = max_seq_length - prompt_len
-    print("max_new_tokens =", max_new_tokens)
+    # 3) compute max_new_tokens once
+    dummy_prompt = build_prompt(json.load(open(os.path.join(SPLIT_DIR, "train.json")))[0])
+    prompt_len = len(tokenizer(dummy_prompt).input_ids)
+    max_new_tokens = max_seq_length - prompt_len
+    print("max_new_tokens = ", max_new_tokens)
 
-    # ────────── containers for combined saving (optional) ──────────
-    combined_CPs, combined_GT, combined_Preds, combined_MSE = [], [], [], []
+    # 3. Evaluate validation and test
+    start = time.perf_counter()
+    test_C, test_G, test_P, mse_test, num_failed = evaluate_split("test", model, tokenizer, max_new_tokens, BATCH_SIZE)
+    end = time.perf_counter()
 
-    for run in range(NUM_RUNS):
-        print(f"\n==========  RUN {run+1}/{NUM_RUNS}  ==========")
+    # 4. Save to .mat
+    savemat(OUTPUT_MAT, {
+        'test_CPs': test_C,
+        'test_ground_truth': test_G,
+        'test_predictions': test_P,
+        'MSE_test': mse_test,
+        'MSE_test_mean': np.mean(mse_test),
+        'time_used': end - start,
+        'num_failed': num_failed
+    })
 
-        start = time.perf_counter()
-        test_C, test_G, test_P, mse_test, num_failed = evaluate_split(
-            "test", model, tokenizer, max_new_tokens, BATCH_SIZE
-        )
-        end = time.perf_counter()
-
-        # save immediately or accumulate
-        if SAVE_SEPARATE_FILES:
-            out_path = os.path.join(
-                SPLIT_DIR, f"evaluation_predictions_run{run+1}.mat"
-            )
-            savemat(out_path, {
-                'test_CPs'        : test_C,
-                'test_ground_truth': test_G,
-                'test_predictions': test_P,
-                'MSE_test'        : mse_test,
-                'MSE_test_mean'   : np.mean(mse_test),
-                'time_used'       : end - start,
-                'num_failed' : num_failed,
-            })
-            print(f"→ saved run {run+1} to {out_path}")
-        else:
-            combined_CPs.append(test_C)
-            combined_GT.append(test_G)
-            combined_Preds.append(test_P)
-            combined_MSE.append(mse_test)
-
-        torch.cuda.empty_cache()
-        print(f"MSE (run {run+1}) = {np.mean(mse_test):.6f}  |  time = {end-start:.1f}s")
-
-    # ────────── one-file-for-all case ──────────
-    if not SAVE_SEPARATE_FILES:
-        out_path = os.path.join(SPLIT_DIR, "evaluation_predictions_ALL.mat")
-        savemat(out_path, {
-            'test_CPs'        : combined_CPs,
-            'test_ground_truth': combined_GT,
-            'test_predictions': combined_Preds,
-            'MSE_test'        : combined_MSE,
-            'MSE_test_mean'   : [float(np.mean(m)) for m in combined_MSE],
-        })
-        print(f"\nSaved ALL runs to {out_path}")
+    torch.cuda.empty_cache()
+    print(f'MSE for test set is: {np.mean(mse_test)}')
+    print(f"Saved evaluation results to {OUTPUT_MAT}")
 
 if __name__ == '__main__':
     main()

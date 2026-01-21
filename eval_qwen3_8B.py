@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import json
 import ast
 import re
@@ -22,14 +22,14 @@ import time
 # User configuration
 # ---------------------------
 # Path to the folder containing the fine-tuned model (contains config, pytorch_model.bin, adapter files)
-SPLIT_DIR = 'results_gemma2/run_20250611_235942'
+SPLIT_DIR = 'results_qwen3_8B/run_20250630_163631'
 MODEL_DIR = SPLIT_DIR + '/llama_ft'
 # Path to the folder containing validation.json and test.json
 
 # Output .mat file
 OUTPUT_MAT = os.path.join(SPLIT_DIR, "evaluation_predictions.mat")
 # Batch size for generation
-BATCH_SIZE = 90
+BATCH_SIZE = 2
 BUFFER_TOKENS = 0  # Safety buffer when computing max_new_tokens
 
 # ───────────────────────────────────────────────────────────────────── #
@@ -94,11 +94,15 @@ def batch_generate(prompts, model, true_spectrum, grids, tokenizer, max_new_toke
             start = batch_idx * batch_size
             end   = start + batch_size
             batch_enc = {k: v[start:end] for k, v in enc.items()}
-            out_ids = model.generate(**batch_enc, max_new_tokens=max_new_tokens)
+            try:
+                out_ids = model.generate(**batch_enc, max_new_tokens=max_new_tokens)
+            except RuntimeError:
+                # print(prompts)
+                continue
             texts  = tokenizer.batch_decode(out_ids.cpu(), skip_special_tokens=True)
             mse_temp = []
             for i, text in enumerate(texts):
-                # print(text)
+                print(text)
                 global_idx = start + i
                 # locate the '[' ... ']'
                 r = text.find('Response:')
@@ -135,7 +139,7 @@ def batch_generate(prompts, model, true_spectrum, grids, tokenizer, max_new_toke
                                              torch.Tensor(true_spectrum[global_idx]))))
                 mse_temp.append(mse_list[-1])
             print('MSE for this batch is ', np.mean(mse_temp))
-    num_failed=len(failed_prompts)
+
     # one-by-one re-generation of the failures
     for p, truth, grid in tqdm(
             zip(failed_prompts, failed_truths, failed_grids),
@@ -179,7 +183,7 @@ def batch_generate(prompts, model, true_spectrum, grids, tokenizer, max_new_toke
             mse_list.append(float(mse_loss(torch.Tensor(nums), torch.Tensor(truth))))
             break
 
-    return all_spectra, mse_list, tsp, cps, num_failed
+    return all_spectra, mse_list, tsp, cps
 
 
 
@@ -207,12 +211,12 @@ def evaluate_split(split_name: str, model, tokenizer, max_new_tokens, batch_size
         true_spectrum.append(nums)
 
     # Generate all responses in batches
-    pds, mse, tsp, cps, num_failed = batch_generate(prompts, model, true_spectrum, grids, tokenizer, max_new_tokens, batch_size)
+    pds, mse, tsp, cps = batch_generate(prompts, model, true_spectrum, grids, tokenizer, max_new_tokens, batch_size)
 
     C = np.stack(cps)
     G = np.stack(tsp)
     P = np.stack(pds)
-    return C, G, P, mse, num_failed
+    return C, G, P, mse
 
 
 def main():
@@ -233,12 +237,12 @@ def main():
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=MODEL_DIR,
         max_seq_length=max_seq_length,
-        # device_map="auto",
+        #device_map="auto",
         load_in_4bit=True,
         fast_inference=False,
         max_lora_rank = lora_rank,
         # offload_folder=os.path.join(output_dir, "offload"),
-        gpu_memory_utilization = 1,
+        gpu_memory_utilization = 0.99,
     )
     FastLanguageModel.for_inference(model)
     # LoRA adapters have been saved in MODEL_DIR, auto-loaded by FastLanguageModel
@@ -251,7 +255,7 @@ def main():
 
     # 3. Evaluate validation and test
     start = time.perf_counter()
-    test_C, test_G, test_P, mse_test, num_failed = evaluate_split("test", model, tokenizer, max_new_tokens, BATCH_SIZE)
+    test_C, test_G, test_P, mse_test = evaluate_split("test", model, tokenizer, max_new_tokens, BATCH_SIZE)
     end = time.perf_counter()
 
     # 4. Save to .mat
@@ -262,7 +266,6 @@ def main():
         'MSE_test': mse_test,
         'MSE_test_mean': np.mean(mse_test),
         'time_used': end - start,
-        'num_failed': num_failed
     })
 
     torch.cuda.empty_cache()

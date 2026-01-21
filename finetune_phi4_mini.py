@@ -10,7 +10,8 @@ Changes v2:
 """
 
 import os, json, random, shutil, logging, math, re
-os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["UNSLOTH_COMPILE_DISABLE"] = "1"   # <— kills the auto-compiler
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
@@ -57,20 +58,20 @@ def main() -> None:
         seed=3407,
         dataset_path="simulation_data_31_least.json",
         train_split=0.80,  # 4 : 1
-        base_model_name="unsloth/Phi-3.5-mini-instruct-bnb-4bit",
-        lora_rank=32,
-        lora_alpha=32,
-        lora_dropout=0.0,
-        learning_rate=4e-4,
-        batch_size=192,
-        grad_accum=1,
+        base_model_name="unsloth/Phi-4-mini-instruct-unsloth-bnb-4bit",
+        lora_rank=16,
+        lora_alpha=16,
+        lora_dropout=0.05,
+        learning_rate=1e-4,
+        batch_size=64,
+        grad_accum=3,
         max_steps=1000000,
         weight_decay=1e-2,
         epochs=8,
     )
 
     # Derived paths
-    OUTPUT_ROOT = "results_phi35_mini"
+    OUTPUT_ROOT = "results_phi4_mini"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(OUTPUT_ROOT) / f"run_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -198,8 +199,8 @@ def main() -> None:
         num_train_epochs=CFG["epochs"],
         lr_scheduler_type="linear",
         overwrite_output_dir=True,
-        torch_compile=True,
-        torch_compile_mode="default",
+        torch_compile=False,
+        # torch_compile_mode="default",
         dataloader_pin_memory=True,
         dataloader_num_workers=10,
         dataloader_prefetch_factor=2,

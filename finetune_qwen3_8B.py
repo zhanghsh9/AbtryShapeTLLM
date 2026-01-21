@@ -10,7 +10,7 @@ Changes v2:
 """
 
 import os, json, random, shutil, logging, math, re
-os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
@@ -57,20 +57,20 @@ def main() -> None:
         seed=3407,
         dataset_path="simulation_data_31_least.json",
         train_split=0.80,  # 4 : 1
-        base_model_name="unsloth/Phi-3.5-mini-instruct-bnb-4bit",
+        base_model_name="unsloth/Qwen3-8B-unsloth-bnb-4bit",
         lora_rank=32,
         lora_alpha=32,
         lora_dropout=0.0,
         learning_rate=4e-4,
-        batch_size=192,
-        grad_accum=1,
+        batch_size=96,
+        grad_accum=2,
         max_steps=1000000,
         weight_decay=1e-2,
         epochs=8,
     )
 
     # Derived paths
-    OUTPUT_ROOT = "results_phi35_mini"
+    OUTPUT_ROOT = "results_qwen3_8B"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(OUTPUT_ROOT) / f"run_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -156,7 +156,7 @@ def main() -> None:
         dtype=None,
         fast_inference=False,
         max_lora_rank=CFG['lora_rank'],
-        gpu_memory_utilization=0.99,
+        gpu_memory_utilization=1,
     )
 
     model = FastLanguageModel.get_peft_model(
