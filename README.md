@@ -1,6 +1,6 @@
 # Chat to Chip: LLM-based Design of Arbitrarily Shaped Metasurfaces
 
-This repository contains the code implementation for the paper **"Chat to chip: large language model based design of arbitrarily shaped metasurfaces"**, published in *Nanophotonics* (2025).
+This repository contains the code implementation for the paper **"Chat to chip: large language model based design of arbitrarily shaped metasurfaces"**, published in *Nanophotonics* (2025). **Paper Link:** [https://doi.org/10.1515/nanoph-2025-0343](https://doi.org/10.1515/nanoph-2025-0343)
 
 ## Overview
 
@@ -37,4 +37,3 @@ If you use this code or data in your research, please cite the following paper:
   url = {https://www.degruyterbrill.com/document/doi/10.1515/nanoph-2025-0343/html}
 }
 ```
-**Paper Link:** [https://doi.org/10.1515/nanoph-2025-0343](https://doi.org/10.1515/nanoph-2025-0343)
